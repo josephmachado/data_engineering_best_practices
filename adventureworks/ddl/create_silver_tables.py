@@ -1,13 +1,17 @@
 from pyspark.sql import SparkSession
 
 
-def create_tables(spark, path="s3a://adventureworks/delta"):
-    spark.sql("CREATE DATABASE IF NOT EXISTS adventureworks")
+def create_tables(
+    spark,
+    path: str = "s3a://adventureworks/delta",
+    database: str = "adventureworks",
+):
+    spark.sql(f"CREATE DATABASE IF NOT EXISTS {database}")
 
-    spark.sql("DROP TABLE IF EXISTS adventureworks.dim_customer")
+    spark.sql(f"DROP TABLE IF EXISTS {database}.dim_customer")
     spark.sql(
         f"""
-              CREATE TABLE adventureworks.dim_customer (
+              CREATE TABLE {database}.dim_customer (
                 id INT,
                 customer_sur_id STRING,
                 first_name STRING,
@@ -23,10 +27,10 @@ def create_tables(spark, path="s3a://adventureworks/delta"):
               """
     )
 
-    spark.sql("DROP TABLE IF EXISTS adventureworks.fct_orders")
+    spark.sql(f"DROP TABLE IF EXISTS {database}.fct_orders")
     spark.sql(
         f"""
-              CREATE TABLE adventureworks.fct_orders (
+              CREATE TABLE {database}.fct_orders (
                 order_id STRING,
                 customer_id INT,
                 item_id STRING,
@@ -40,10 +44,13 @@ def create_tables(spark, path="s3a://adventureworks/delta"):
     )
 
 
-def drop_tables(spark):
-    spark.sql("DROP TABLE IF EXISTS adventureworks.dim_customer")
-    spark.sql("DROP TABLE IF EXISTS adventureworks.fct_orders")
-    spark.sql("DROP DATABASE IF EXISTS adventureworks")
+def drop_tables(
+    spark,
+    database: str = "adventureworks",
+):
+    spark.sql(f"DROP TABLE IF EXISTS {database}.dim_customer")
+    spark.sql(f"DROP TABLE IF EXISTS {database}.fct_orders")
+    spark.sql(f"DROP DATABASE IF EXISTS {database}")
 
 
 if __name__ == '__main__':
