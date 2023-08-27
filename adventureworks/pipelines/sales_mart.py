@@ -4,8 +4,7 @@ import random
 import time
 import uuid
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
@@ -152,52 +151,18 @@ class StandardETL(ABC):
         )
 
 
-STATES_LIST = [
-    "AC",
-    "AL",
-    "AP",
-    "AM",
-    "BA",
-    "CE",
-    "DF",
-    "ES",
-    "GO",
-    "MA",
-    "MT",
-    "MS",
-    "MG",
-    "PA",
-    "PB",
-    "PR",
-    "PE",
-    "PI",
-    "RJ",
-    "RN",
-    "RS",
-    "RO",
-    "RR",
-    "SC",
-    "SP",
-    "SE",
-    "TO",
-]
+##################################################################################################
+### GENERATING FAKE BRONZE DATA !!!
+##################################################################################################
 
 
 def _get_orders(
     cust_ids: List[int], num_orders: int
 ) -> List[Tuple[str, int, str, str, str, str]]:
-    # order_id, customer_id, item_id, item_name, delivered_on
     items = [
         "chair",
         "car",
         "toy",
-        "laptop",
-        "box",
-        "food",
-        "shirt",
-        "weights",
-        "bags",
-        "carts",
     ]
     return [
         (
@@ -221,7 +186,7 @@ def _get_customer_data(
             cust_id,
             fake.first_name(),
             fake.last_name(),
-            random.choice(STATES_LIST),
+            fake.state_abbr(),
             datetime.now(),
             datetime.now(),
         )
@@ -236,49 +201,39 @@ def generate_bronze_data(
     **kwargs,
 ) -> List[DataFrame]:
     cust_ids = [i for i in range(1000)]
-    orders_data = _get_orders(cust_ids, 10000)
-    customer_data = _get_customer_data(cust_ids)
-    customer_cols = [
-        "id",
-        "first_name",
-        "last_name",
-        "state_id",
-        "datetime_created",
-        "datetime_updated",
+    return [
+        spark.createDataFrame(
+            data=_get_customer_data(cust_ids),
+            schema=StructType(
+                [
+                    StructField("id", IntegerType(), True),
+                    StructField("first_name", StringType(), True),
+                    StructField("last_name", StringType(), True),
+                    StructField("state_id", StringType(), True),
+                    StructField("datetime_created", TimestampType(), True),
+                    StructField("datetime_updated", TimestampType(), True),
+                ]
+            ),
+        ),
+        spark.createDataFrame(
+            data=_get_orders(cust_ids, 10000),
+            schema=StructType(
+                [
+                    StructField("order_id", StringType(), True),
+                    StructField("customer_id", IntegerType(), True),
+                    StructField("item_id", StringType(), True),
+                    StructField("item_name", StringType(), True),
+                    StructField("delivered_on", TimestampType(), True),
+                    StructField(
+                        "datetime_order_placed", TimestampType(), True
+                    ),
+                ]
+            ),
+        ),
     ]
-    customer_schema = StructType(
-        [
-            StructField("id", IntegerType(), True),
-            StructField("first_name", StringType(), True),
-            StructField("last_name", StringType(), True),
-            StructField("state_id", StringType(), True),
-            StructField("datetime_created", TimestampType(), True),
-            StructField("datetime_updated", TimestampType(), True),
-        ]
-    )
-    customer_df = spark.createDataFrame(
-        data=customer_data, schema=customer_schema
-    )
-    orders_cols = [
-        "order_id",
-        "customer_id",
-        "item_id",
-        "item_name",
-        "delivered_on",
-        "datetime_order_placed",
-    ]
-    orders_schema = StructType(
-        [
-            StructField("order_id", StringType(), True),
-            StructField("customer_id", IntegerType(), True),
-            StructField("item_id", StringType(), True),
-            StructField("item_name", StringType(), True),
-            StructField("delivered_on", TimestampType(), True),
-            StructField("datetime_order_placed", TimestampType(), True),
-        ]
-    )
-    orders_df = spark.createDataFrame(data=orders_data, schema=orders_schema)
-    return [customer_df, orders_df]
+
+
+#####################################################################################################
 
 
 class SalesMartETL(StandardETL):
