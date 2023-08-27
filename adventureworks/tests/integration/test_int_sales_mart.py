@@ -1,8 +1,8 @@
+from adventureworks.ddl.create_silver_tables import \
+    create_tables as create_silver_tables
+from adventureworks.ddl.create_silver_tables import \
+    drop_tables as drop_silver_tables
 from adventureworks.pipelines.sales_mart import SalesMartETL
-from adventureworks.ddl.create_silver_tables import (
-    create_tables as create_silver_tables,
-    drop_tables as drop_silver_tables,
-)
 
 
 class TestSalesMartETL:
