@@ -1,13 +1,17 @@
 from pyspark.sql import SparkSession
 
 
-def create_tables(spark, path="s3a://adventureworks/delta"):
-    spark.sql("CREATE DATABASE IF NOT EXISTS adventureworks")
+def create_tables(
+    spark,
+    path="s3a://adventureworks/delta",
+    database: str = "adventureworks",
+):
+    spark.sql(f"CREATE DATABASE IF NOT EXISTS {database}")
 
-    spark.sql("DROP TABLE IF EXISTS adventureworks.sales_mart")
+    spark.sql(f"DROP TABLE IF EXISTS {database}.sales_mart")
     spark.sql(
         f"""
-              CREATE TABLE adventureworks.sales_mart (
+              CREATE TABLE {database}.sales_mart (
                 deliver_date STRING,
                 state_id STRING,
                 num_orders BIGINT,
@@ -18,9 +22,9 @@ def create_tables(spark, path="s3a://adventureworks/delta"):
     )
 
 
-def drop_tables(spark):
-    spark.sql("DROP TABLE IF EXISTS adventureworks.sales_mart")
-    spark.sql("DROP DATABASE IF EXISTS adventureworks")
+def drop_tables(spark, database: str = "adventureworks"):
+    spark.sql(f"DROP TABLE IF EXISTS {database}.sales_mart")
+    spark.sql(f"DROP DATABASE IF EXISTS {database}")
 
 
 if __name__ == '__main__':

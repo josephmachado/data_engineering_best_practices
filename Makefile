@@ -33,17 +33,17 @@ spark-sh:
 ######################################################################################################
 
 pytest:
-	python3 -m pytest --log-cli-level info -p no:warnings -v ./adventureworks/tests
+	docker exec -ti local-spark bash -c 'python3 -m pytest --log-cli-level info -p no:warnings -v ./adventureworks/tests'
 
 format:
-	python3 -m black -S --line-length 79 --preview ./adventureworks
-	isort ./adventureworks
+	docker exec -ti local-spark bash -c 'python3 -m black -S --line-length 79 --preview ./adventureworks'
+	docker exec -ti local-spark bash -c 'isort ./adventureworks'
 
 type:
-	python3 -m mypy --no-implicit-reexport --ignore-missing-imports --no-namespace-packages ./adventureworks
+	docker exec -ti local-spark bash -c 'python3 -m mypy --no-implicit-reexport --ignore-missing-imports --no-namespace-packages ./adventureworks'
 
 lint:
-	flake8 ./adventureworks
-	flake8 ./adventureworks/tests
+	docker exec -ti local-spark bash -c 'flake8 ./adventureworks'
+	docker exec -ti local-spark bash -c 'flake8 ./adventureworks/tests'
 
 ci: format type lint pytest

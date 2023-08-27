@@ -1,9 +1,6 @@
-import os
-
 import pyspark
 import pytest
-from delta import *
-from pyspark.sql import SparkSession
+from delta import configure_spark_with_delta_pip
 
 
 @pytest.fixture(scope='session')

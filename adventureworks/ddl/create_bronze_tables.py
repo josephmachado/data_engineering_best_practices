@@ -1,14 +1,17 @@
-from delta import *
 from pyspark.sql import SparkSession
 
 
-def create_tables(spark, path="s3a://adventureworks/delta"):
-    spark.sql("CREATE DATABASE IF NOT EXISTS adventureworks")
+def create_tables(
+    spark,
+    path="s3a://adventureworks/delta",
+    database: str = "adventureworks",
+):
+    spark.sql(f"CREATE DATABASE IF NOT EXISTS {database}")
 
-    spark.sql("DROP TABLE IF EXISTS adventureworks.customer")
+    spark.sql(f"DROP TABLE IF EXISTS {database}.customer")
     spark.sql(
         f"""
-              CREATE TABLE adventureworks.customer (
+              CREATE TABLE {database}.customer (
                 id INT,
                 first_name STRING,
                 last_name STRING,
@@ -21,10 +24,10 @@ def create_tables(spark, path="s3a://adventureworks/delta"):
               """
     )
 
-    spark.sql("DROP TABLE IF EXISTS adventureworks.orders")
+    spark.sql(f"DROP TABLE IF EXISTS {database}.orders")
     spark.sql(
         f"""
-              CREATE TABLE adventureworks.orders (
+              CREATE TABLE {database}.orders (
                 order_id STRING,
                 customer_id INT,
                 item_id STRING,
@@ -38,15 +41,18 @@ def create_tables(spark, path="s3a://adventureworks/delta"):
     )
 
 
-def drop_tables(spark):
-    spark.sql("DROP TABLE IF EXISTS adventureworks.customer")
-    spark.sql("DROP TABLE IF EXISTS adventureworks.orders")
-    spark.sql("DROP DATABASE IF EXISTS adventureworks")
+def drop_tables(
+    spark,
+    database: str = "adventureworks",
+):
+    spark.sql(f"DROP TABLE IF EXISTS {database}.customer")
+    spark.sql(f"DROP TABLE IF EXISTS {database}.orders")
+    spark.sql(f"DROP DATABASE IF EXISTS {database}")
 
 
 if __name__ == '__main__':
     spark = (
-        SparkSession.builder.appName("adventureworks_ddl")
+        SparkSession.builder.appName("{database}_ddl")
         .config("spark.executor.cores", "1")
         .config("spark.executor.instances", "1")
         .enableHiveSupport()
