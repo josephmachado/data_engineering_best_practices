@@ -12,13 +12,8 @@ from delta.tables import DeltaTable
 from faker import Faker
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, current_timestamp, expr, lit
-from pyspark.sql.types import (
-    IntegerType,
-    StringType,
-    StructField,
-    StructType,
-    TimestampType,
-)
+from pyspark.sql.types import (IntegerType, StringType, StructField,
+                               StructType, TimestampType)
 
 ########################################################################
 # GENERATING FAKE BRONZE DATA !!!

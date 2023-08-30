@@ -31,7 +31,13 @@ stores:
     class_name: ValidationsStore
     store_backend:
       class_name: DatabaseStoreBackend
-      credentials: ${db_creds}
+      credentials:
+        drivername: ${METADATA_DRIVERNAME}
+        host: ${METADATA_HOST}
+        port: ${METADATA_PORT}
+        username: ${METADATA_USERNAME}
+        password: ${METADATA_PASSWORD}
+        database: ${METADATA_DATABASE}
 expectations_store_name: expectations_store
 validations_store_name: validations_postgres_store
 evaluation_parameter_store_name: evaluation_parameter_store

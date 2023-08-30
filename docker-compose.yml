@@ -7,6 +7,13 @@ services:
     build:
       context: ./
       dockerfile: ./containers/spark/Dockerfile
+    environment:
+      METADATA_DRIVERNAME: postgresql
+      METADATA_HOST: metadata
+      METADATA_PORT: '5432'
+      METADATA_USERNAME: sdeuser
+      METADATA_PASSWORD: sdepassword
+      METADATA_DATABASE: metadatadb
     volumes:
       - ./adventureworks:/opt/spark/work-dir/adventureworks
 
