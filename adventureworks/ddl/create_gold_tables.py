@@ -12,11 +12,13 @@ def create_tables(
     spark.sql(
         f"""
               CREATE TABLE {database}.sales_mart (
-                deliver_date STRING,
+                deliver_date DATE,
                 state_id STRING,
                 num_orders BIGINT,
-                etl_inserted TIMESTAMP
+                etl_inserted TIMESTAMP,
+                partition STRING
                 ) USING DELTA
+                PARTITIONED BY (partition)
                 LOCATION '{path}/sales_mart'
               """
     )
