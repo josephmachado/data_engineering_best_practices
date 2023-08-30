@@ -29,7 +29,16 @@ spark.sql("select * from adventureworks.dim_customer where current = false").sho
 spark.sql("select * from adventureworks.fct_orders limit 3").show()
 ```
 
-isactive flag to indicate deletes
+## Check validation store
+
+```bash
+make meta
+```
+
+```sql
+select * from ge_validations_store  limit 1;
+exit
+```
 
 # Code design
 
