@@ -18,7 +18,8 @@ def create_tables(
                 state_id STRING,
                 datetime_created TIMESTAMP,
                 datetime_updated TIMESTAMP,
-                etl_inserted TIMESTAMP
+                etl_inserted TIMESTAMP,
+                partition STRING
                 ) USING DELTA
                 LOCATION '{path}/customer'
               """
@@ -34,7 +35,8 @@ def create_tables(
                 item_name STRING,
                 delivered_on TIMESTAMP,
                 datetime_order_placed TIMESTAMP,
-                etl_inserted TIMESTAMP
+                etl_inserted TIMESTAMP,
+                partition STRING
                 ) USING DELTA
                 LOCATION '{path}/orders'
               """

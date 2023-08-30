@@ -15,7 +15,8 @@ def create_tables(
                 deliver_date STRING,
                 state_id STRING,
                 num_orders BIGINT,
-                etl_inserted TIMESTAMP
+                etl_inserted TIMESTAMP,
+                partition STRING
                 ) USING DELTA
                 LOCATION '{path}/sales_mart'
               """

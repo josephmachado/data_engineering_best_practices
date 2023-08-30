@@ -21,7 +21,8 @@ def create_tables(
                 datetime_updated TIMESTAMP,
                 current boolean,
                 valid_from TIMESTAMP,
-                valid_to TIMESTAMP
+                valid_to TIMESTAMP,
+                partition STRING
                 ) USING DELTA
                 LOCATION '{path}/dim_customer'
               """
@@ -37,7 +38,8 @@ def create_tables(
                 item_name STRING,
                 delivered_on TIMESTAMP,
                 datetime_order_placed TIMESTAMP,
-                customer_sur_id STRING
+                customer_sur_id STRING,
+                partition STRING
                 ) USING DELTA
                 LOCATION '{path}/fct_orders'
               """

@@ -21,166 +21,6 @@ from pyspark.sql.types import (
 )
 
 
-@dataclass
-class DeltaDataSet:
-    name: str
-    curr_data: DataFrame
-    primary_keys: List[str]
-    storage_path: str
-    table_name: str
-    data_type: str
-    database: str
-    partition: str
-    skip_publish: bool = False
-
-
-class InValidDataException(Exception):
-    pass
-
-
-class StandardETL(ABC):
-    def __init__(
-        self,
-        storage_path: Optional[str] = None,
-        database: Optional[str] = None,
-    ):
-        self.STORAGE_PATH = storage_path or 's3a://adventureworks/delta'
-        self.DATABASE = database or 'adventureworks'
-        self.DEFAULT_PARTITION = datetime.now().strftime("%Y-%m-%d-%H")
-
-    def run_data_validations(self, input_datasets: Dict[str, DeltaDataSet]):
-        context = gx.get_context(
-            context_root_dir=os.path.join(
-                os.getcwd(),
-                "adventureworks",
-                "great_expectations",
-            )
-        )
-
-        validations = []
-        for input_dataset in input_datasets.values():
-            validations.append(
-                {
-                    "batch_request": context.get_datasource("spark_datasource")
-                    .get_asset(input_dataset.name)
-                    .build_batch_request(dataframe=input_dataset.curr_data),
-                    "expectation_suite_name": input_dataset.name,
-                }
-            )
-        return context.run_checkpoint(
-            checkpoint_name="dq_checkpoint", validations=validations
-        ).list_validation_results()
-
-    def validate_data(self, input_datasets: Dict[str, DeltaDataSet]) -> bool:
-        results = {}
-        for validation in self.run_data_validations(input_datasets):
-            results[
-                validation.get('meta').get('expectation_suite_name')
-            ] = validation.get('success')
-        for k, v in results.items():
-            if not v:
-                raise InValidDataException(
-                    f"The {k} dataset did not pass validation, please check"
-                    " the metadata db for more information"
-                )
-
-        return True
-
-    def check_required_inputs(
-        self, input_datasets: Dict[str, DeltaDataSet], required_ds: List[str]
-    ) -> None:
-        if not all([ds in input_datasets for ds in required_ds]):
-            raise ValueError(
-                f"The input_datasets {input_datasets.keys()} does not contain"
-                f" {required_ds}"
-            )
-
-    def construct_join_string(self, keys: List[str]) -> str:
-        return ' AND '.join([f"target.{key} = source.{key}" for key in keys])
-
-    def publish_data(
-        self,
-        input_datasets: Dict[str, DeltaDataSet],
-        spark: SparkSession,
-        **kwargs,
-    ) -> None:
-        for input_dataset in input_datasets.values():
-            if not input_dataset.skip_publish:
-                targetDF = DeltaTable.forPath(
-                    spark, input_dataset.storage_path
-                )
-                # todo: use delta table generated column,
-                # when its available in create DDL
-                input_dataset.curr_data = input_dataset.curr_data.withColumn(
-                    'etl_inserted', current_timestamp()
-                )
-                (
-                    targetDF.alias("target")
-                    .merge(
-                        input_dataset.curr_data.alias("source"),
-                        self.construct_join_string(input_dataset.primary_keys),
-                    )
-                    .whenMatchedUpdateAll()
-                    .whenNotMatchedInsertAll()
-                    .whenNotMatchedBySourceDelete()
-                    .execute()
-                )
-
-    @abstractmethod
-    def get_bronze_datasets(
-        self, spark: SparkSession, **kwargs
-    ) -> Dict[str, DeltaDataSet]:
-        pass
-
-    @abstractmethod
-    def get_silver_datasets(
-        self,
-        input_datasets: Dict[str, DeltaDataSet],
-        spark: SparkSession,
-        **kwargs,
-    ) -> Dict[str, DeltaDataSet]:
-        pass
-
-    @abstractmethod
-    def get_gold_datasets(
-        self,
-        input_datasets: Dict[str, DeltaDataSet],
-        spark: SparkSession,
-        **kwargs,
-    ) -> Dict[str, DeltaDataSet]:
-        pass
-
-    def run(self, spark: SparkSession, **kwargs):
-        partition = kwargs.get('partition')
-        bronze_data_sets = self.get_bronze_datasets(spark, partition=partition)
-        self.validate_data(bronze_data_sets)
-        self.publish_data(bronze_data_sets, spark)
-        logging.info(
-            'Created, validated & published bronze datasets:'
-            f' {[ds for ds in bronze_data_sets.keys()]}'
-        )
-
-        silver_data_sets = self.get_silver_datasets(
-            bronze_data_sets, spark, partition=partition
-        )
-        self.validate_data(silver_data_sets)
-        self.publish_data(silver_data_sets, spark)
-        logging.info(
-            'Created, validated & published silver datasets:'
-            f' {[ds for ds in silver_data_sets.keys()]}'
-        )
-
-        gold_data_sets = self.get_gold_datasets(
-            silver_data_sets, spark, partition=partition
-        )
-        self.validate_data(gold_data_sets)
-        self.publish_data(gold_data_sets, spark)
-        logging.info(
-            'Created, validated & published gold datasets:'
-            f' {[ds for ds in gold_data_sets.keys()]}'
-        )
-
-
 ########################################################################
 # GENERATING FAKE BRONZE DATA !!!
 ########################################################################
@@ -266,6 +106,168 @@ def generate_bronze_data(
 ########################################################################
 
 
+@dataclass
+class DeltaDataSet:
+    name: str
+    curr_data: DataFrame
+    primary_keys: List[str]
+    storage_path: str
+    table_name: str
+    data_type: str
+    database: str
+    partition: str
+    skip_publish: bool = False
+
+
+class InValidDataException(Exception):
+    pass
+
+
+class StandardETL(ABC):
+    def __init__(
+        self,
+        storage_path: Optional[str] = None,
+        database: Optional[str] = None,
+        partition: Optional[str] = None,
+    ):
+        self.STORAGE_PATH = storage_path or 's3a://adventureworks/delta'
+        self.DATABASE = database or 'adventureworks'
+        self.DEFAULT_PARTITION = partition or datetime.now().strftime(
+            "%Y-%m-%d-%H-%M-%S"
+        )
+
+    def run_data_validations(self, input_datasets: Dict[str, DeltaDataSet]):
+        context = gx.get_context(
+            context_root_dir=os.path.join(
+                os.getcwd(),
+                "adventureworks",
+                "great_expectations",
+            )
+        )
+
+        validations = []
+        for input_dataset in input_datasets.values():
+            validations.append(
+                {
+                    "batch_request": context.get_datasource("spark_datasource")
+                    .get_asset(input_dataset.name)
+                    .build_batch_request(dataframe=input_dataset.curr_data),
+                    "expectation_suite_name": input_dataset.name,
+                }
+            )
+        return context.run_checkpoint(
+            checkpoint_name="dq_checkpoint", validations=validations
+        ).list_validation_results()
+
+    def validate_data(self, input_datasets: Dict[str, DeltaDataSet]) -> bool:
+        results = {}
+        for validation in self.run_data_validations(input_datasets):
+            results[
+                validation.get('meta').get('expectation_suite_name')
+            ] = validation.get('success')
+        for k, v in results.items():
+            if not v:
+                raise InValidDataException(
+                    f"The {k} dataset did not pass validation, please check"
+                    " the metadata db for more information"
+                )
+
+        return True
+
+    def check_required_inputs(
+        self, input_datasets: Dict[str, DeltaDataSet], required_ds: List[str]
+    ) -> None:
+        if not all([ds in input_datasets for ds in required_ds]):
+            raise ValueError(
+                f"The input_datasets {input_datasets.keys()} does not contain"
+                f" {required_ds}"
+            )
+
+    def construct_join_string(self, keys: List[str]) -> str:
+        return ' AND '.join([f"target.{key} = source.{key}" for key in keys])
+
+    def publish_data(
+        self,
+        input_datasets: Dict[str, DeltaDataSet],
+        spark: SparkSession,
+        **kwargs,
+    ) -> None:
+        for input_dataset in input_datasets.values():
+            if not input_dataset.skip_publish:
+                targetDF = DeltaTable.forPath(
+                    spark, input_dataset.storage_path
+                )
+                # todo: use delta table generated column,
+                # when its available in create DDL
+                curr_data = input_dataset.curr_data.withColumn(
+                    'etl_inserted', current_timestamp()
+                ).withColumn('partition', lit(input_dataset.partition))
+                (
+                    targetDF.alias("target")
+                    .merge(
+                        curr_data.alias("source"),
+                        self.construct_join_string(input_dataset.primary_keys),
+                    )
+                    .whenMatchedUpdateAll()
+                    .whenNotMatchedInsertAll()
+                    .execute()
+                )
+
+    @abstractmethod
+    def get_bronze_datasets(
+        self, spark: SparkSession, **kwargs
+    ) -> Dict[str, DeltaDataSet]:
+        pass
+
+    @abstractmethod
+    def get_silver_datasets(
+        self,
+        input_datasets: Dict[str, DeltaDataSet],
+        spark: SparkSession,
+        **kwargs,
+    ) -> Dict[str, DeltaDataSet]:
+        pass
+
+    @abstractmethod
+    def get_gold_datasets(
+        self,
+        input_datasets: Dict[str, DeltaDataSet],
+        spark: SparkSession,
+        **kwargs,
+    ) -> Dict[str, DeltaDataSet]:
+        pass
+
+    def run(self, spark: SparkSession, **kwargs):
+        partition = kwargs.get('partition')
+        bronze_data_sets = self.get_bronze_datasets(spark, partition=partition)
+        self.validate_data(bronze_data_sets)
+        self.publish_data(bronze_data_sets, spark)
+        logging.info(
+            'Created, validated & published bronze datasets:'
+            f' {[ds for ds in bronze_data_sets.keys()]}'
+        )
+
+        silver_data_sets = self.get_silver_datasets(
+            bronze_data_sets, spark, partition=partition
+        )
+        self.validate_data(silver_data_sets)
+        self.publish_data(silver_data_sets, spark)
+        logging.info(
+            'Created, validated & published silver datasets:'
+            f' {[ds for ds in silver_data_sets.keys()]}'
+        )
+
+        gold_data_sets = self.get_gold_datasets(
+            silver_data_sets, spark, partition=partition
+        )
+        self.validate_data(gold_data_sets)
+        self.publish_data(gold_data_sets, spark)
+        logging.info(
+            'Created, validated & published gold datasets:'
+            f' {[ds for ds in gold_data_sets.keys()]}'
+        )
+
+
 class SalesMartETL(StandardETL):
     def get_bronze_datasets(
         self, spark: SparkSession, **kwargs
@@ -275,7 +277,7 @@ class SalesMartETL(StandardETL):
             'customer': DeltaDataSet(
                 name='customer',
                 curr_data=customer_df,
-                primary_keys=['id'],
+                primary_keys=['id', 'partition'],
                 storage_path=f'{self.STORAGE_PATH}/customer',
                 table_name='customer',
                 data_type='delta',
@@ -285,7 +287,7 @@ class SalesMartETL(StandardETL):
             'orders': DeltaDataSet(
                 name='orders',
                 curr_data=orders_df,
-                primary_keys=['order_id'],
+                primary_keys=['order_id', 'partition'],
                 storage_path=f'{self.STORAGE_PATH}/orders',
                 table_name='orders',
                 data_type='delta',
@@ -491,7 +493,7 @@ class SalesMartETL(StandardETL):
             'sales_mart': DeltaDataSet(
                 name='sales_mart',
                 curr_data=sales_mart_df,
-                primary_keys=['state_id', 'deliver_date'],
+                primary_keys=['deliver_date', 'state_id', 'partition'],
                 storage_path=f'{self.STORAGE_PATH}/sales_mart',
                 table_name='sales_mart',
                 data_type='delta',
@@ -510,7 +512,7 @@ if __name__ == "__main__":
     spark.sparkContext.setLogLevel("ERROR")
     sm = SalesMartETL()
     partition = datetime.now().strftime(
-        "%Y-%m-%d-%H"
+        "%Y-%m-%d-%H-%M-%S"
     )  # usually from orchestrator
     sm.run(spark, partition=partition)
     spark.stop
