@@ -20,7 +20,6 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-
 ########################################################################
 # GENERATING FAKE BRONZE DATA !!!
 ########################################################################
@@ -117,6 +116,7 @@ class DeltaDataSet:
     database: str
     partition: str
     skip_publish: bool = False
+    replace_partition: bool = False
 
 
 class InValidDataException(Exception):
@@ -194,24 +194,30 @@ class StandardETL(ABC):
     ) -> None:
         for input_dataset in input_datasets.values():
             if not input_dataset.skip_publish:
-                targetDF = DeltaTable.forPath(
-                    spark, input_dataset.storage_path
-                )
-                # todo: use delta table generated column,
-                # when its available in create DDL
                 curr_data = input_dataset.curr_data.withColumn(
                     'etl_inserted', current_timestamp()
                 ).withColumn('partition', lit(input_dataset.partition))
-                (
-                    targetDF.alias("target")
-                    .merge(
-                        curr_data.alias("source"),
-                        self.construct_join_string(input_dataset.primary_keys),
+                if input_dataset.replace_partition:
+                    curr_data.write.format("delta").mode("overwrite").option(
+                        "replaceWhere",
+                        f"partition = '{input_dataset.partition}'",
+                    ).save(input_dataset.storage_path)
+                else:
+                    targetDF = DeltaTable.forPath(
+                        spark, input_dataset.storage_path
                     )
-                    .whenMatchedUpdateAll()
-                    .whenNotMatchedInsertAll()
-                    .execute()
-                )
+                    (
+                        targetDF.alias("target")
+                        .merge(
+                            curr_data.alias("source"),
+                            self.construct_join_string(
+                                input_dataset.primary_keys
+                            ),
+                        )
+                        .whenMatchedUpdateAll()
+                        .whenNotMatchedInsertAll()
+                        .execute()
+                    )
 
     @abstractmethod
     def get_bronze_datasets(
@@ -283,6 +289,7 @@ class SalesMartETL(StandardETL):
                 data_type='delta',
                 database=f'{self.DATABASE}',
                 partition=kwargs.get('partition', self.DEFAULT_PARTITION),
+                replace_partition=True,
             ),
             'orders': DeltaDataSet(
                 name='orders',
@@ -293,6 +300,7 @@ class SalesMartETL(StandardETL):
                 data_type='delta',
                 database=f'{self.DATABASE}',
                 partition=kwargs.get('partition', self.DEFAULT_PARTITION),
+                replace_partition=True,
             ),
         }
 
@@ -449,6 +457,7 @@ class SalesMartETL(StandardETL):
             data_type='delta',
             database=f'{self.DATABASE}',
             partition=kwargs.get('partition', self.DEFAULT_PARTITION),
+            replace_partition=True,
         )
         return silver_datasets
 
@@ -499,6 +508,7 @@ class SalesMartETL(StandardETL):
                 data_type='delta',
                 database=f'{self.DATABASE}',
                 partition=kwargs.get('partition', self.DEFAULT_PARTITION),
+                replace_partition=True,
             )
         }
 
@@ -512,7 +522,7 @@ if __name__ == "__main__":
     spark.sparkContext.setLogLevel("ERROR")
     sm = SalesMartETL()
     partition = datetime.now().strftime(
-        "%Y-%m-%d-%H-%M-%S"
-    )  # usually from orchestrator
+        "%Y-%m-%d-%H-%M"
+    )  # usually from orchestrator -%S
     sm.run(spark, partition=partition)
     spark.stop

@@ -21,6 +21,7 @@ def create_tables(
                 etl_inserted TIMESTAMP,
                 partition STRING
                 ) USING DELTA
+                PARTITIONED BY (partition)
                 LOCATION '{path}/customer'
               """
     )
@@ -38,6 +39,7 @@ def create_tables(
                 etl_inserted TIMESTAMP,
                 partition STRING
                 ) USING DELTA
+                PARTITIONED BY (partition)
                 LOCATION '{path}/orders'
               """
     )

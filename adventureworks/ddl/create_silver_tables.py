@@ -39,8 +39,10 @@ def create_tables(
                 delivered_on TIMESTAMP,
                 datetime_order_placed TIMESTAMP,
                 customer_sur_id STRING,
+                etl_inserted TIMESTAMP,
                 partition STRING
                 ) USING DELTA
+                PARTITIONED BY (partition)
                 LOCATION '{path}/fct_orders'
               """
     )
