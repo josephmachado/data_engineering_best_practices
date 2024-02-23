@@ -35,6 +35,7 @@ spark.sql("select partition from adventureworks.sales_mart group by 1").show() /
 spark.sql("select count(*) from businessintelligence.sales_mart").show() // 59
 spark.sql("select count(*) from adventureworks.dim_customer").show() // 1000 * num of etl runs
 spark.sql("select count(*) from adventureworks.fct_orders").show() // 10000 * num of etl runs
+:q // Quit scala shell
 ```
 
 You can see the results of DQ checks, using `make meta`

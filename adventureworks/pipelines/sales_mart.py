@@ -1,108 +1,16 @@
 import logging
 import os
-import random
-import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import great_expectations as gx
 from delta.tables import DeltaTable
-from faker import Faker
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, current_timestamp, expr, lit
-from pyspark.sql.types import (
-    IntegerType,
-    StringType,
-    StructField,
-    StructType,
-    TimestampType,
-)
 
-########################################################################
-# GENERATING FAKE BRONZE DATA !!!
-########################################################################
-
-
-def _get_orders(
-    cust_ids: List[int], num_orders: int
-) -> List[Tuple[str, int, str, str, datetime, datetime]]:
-    items = [
-        "chair",
-        "car",
-        "toy",
-    ]
-    return [
-        (
-            str(uuid.uuid4()),
-            int(random.choice(cust_ids)),
-            str(uuid.uuid4()),
-            random.choice(items),
-            datetime.now(),
-            datetime.now(),
-        )
-        for _ in range(num_orders)
-    ]
-
-
-def _get_customer_data(
-    cust_ids: List[int],
-) -> List[Tuple[int, str, str, str, datetime, datetime]]:
-    fake = Faker()
-    return [
-        (
-            cust_id,
-            fake.first_name(),
-            fake.last_name(),
-            fake.state_abbr(),
-            datetime.now(),
-            datetime.now(),
-        )
-        for cust_id in cust_ids
-    ]
-
-
-def generate_bronze_data(
-    spark: SparkSession,
-    iteration: int = 1,
-    orders_bucket: str = "app-orders",
-    **kwargs,
-) -> List[DataFrame]:
-    cust_ids = [i for i in range(1000)]
-    return [
-        spark.createDataFrame(
-            data=_get_customer_data(cust_ids),
-            schema=StructType(
-                [
-                    StructField("id", IntegerType(), True),
-                    StructField("first_name", StringType(), True),
-                    StructField("last_name", StringType(), True),
-                    StructField("state_id", StringType(), True),
-                    StructField("datetime_created", TimestampType(), True),
-                    StructField("datetime_updated", TimestampType(), True),
-                ]
-            ),
-        ),
-        spark.createDataFrame(
-            data=_get_orders(cust_ids, 10000),
-            schema=StructType(
-                [
-                    StructField("order_id", StringType(), True),
-                    StructField("customer_id", IntegerType(), True),
-                    StructField("item_id", StringType(), True),
-                    StructField("item_name", StringType(), True),
-                    StructField("delivered_on", TimestampType(), True),
-                    StructField(
-                        "datetime_order_placed", TimestampType(), True
-                    ),
-                ]
-            ),
-        ),
-    ]
-
-
-########################################################################
+from utils.create_fake_data import generate_bronze_data
 
 
 @dataclass
@@ -130,8 +38,8 @@ class StandardETL(ABC):
         database: Optional[str] = None,
         partition: Optional[str] = None,
     ):
-        self.STORAGE_PATH = storage_path or 's3a://adventureworks/delta'
-        self.DATABASE = database or 'adventureworks'
+        self.STORAGE_PATH = storage_path or "s3a://adventureworks/delta"
+        self.DATABASE = database or "adventureworks"
         self.DEFAULT_PARTITION = partition or datetime.now().strftime(
             "%Y-%m-%d-%H-%M-%S"
         )
@@ -162,9 +70,9 @@ class StandardETL(ABC):
     def validate_data(self, input_datasets: Dict[str, DeltaDataSet]) -> bool:
         results = {}
         for validation in self.run_data_validations(input_datasets):
-            results[
-                validation.get('meta').get('expectation_suite_name')
-            ] = validation.get('success')
+            results[validation.get("meta").get("expectation_suite_name")] = (
+                validation.get("success")
+            )
         for k, v in results.items():
             if not v:
                 raise InValidDataException(
@@ -184,7 +92,7 @@ class StandardETL(ABC):
             )
 
     def construct_join_string(self, keys: List[str]) -> str:
-        return ' AND '.join([f"target.{key} = source.{key}" for key in keys])
+        return " AND ".join([f"target.{key} = source.{key}" for key in keys])
 
     def publish_data(
         self,
@@ -195,24 +103,20 @@ class StandardETL(ABC):
         for input_dataset in input_datasets.values():
             if not input_dataset.skip_publish:
                 curr_data = input_dataset.curr_data.withColumn(
-                    'etl_inserted', current_timestamp()
-                ).withColumn('partition', lit(input_dataset.partition))
+                    "etl_inserted", current_timestamp()
+                ).withColumn("partition", lit(input_dataset.partition))
                 if input_dataset.replace_partition:
                     curr_data.write.format("delta").mode("overwrite").option(
                         "replaceWhere",
                         f"partition = '{input_dataset.partition}'",
                     ).save(input_dataset.storage_path)
                 else:
-                    targetDF = DeltaTable.forPath(
-                        spark, input_dataset.storage_path
-                    )
+                    targetDF = DeltaTable.forPath(spark, input_dataset.storage_path)
                     (
                         targetDF.alias("target")
                         .merge(
                             curr_data.alias("source"),
-                            self.construct_join_string(
-                                input_dataset.primary_keys
-                            ),
+                            self.construct_join_string(input_dataset.primary_keys),
                         )
                         .whenMatchedUpdateAll()
                         .whenNotMatchedInsertAll()
@@ -244,13 +148,13 @@ class StandardETL(ABC):
         pass
 
     def run(self, spark: SparkSession, **kwargs):
-        partition = kwargs.get('partition')
+        partition = kwargs.get("partition")
         bronze_data_sets = self.get_bronze_datasets(spark, partition=partition)
         self.validate_data(bronze_data_sets)
         self.publish_data(bronze_data_sets, spark)
         logging.info(
-            'Created, validated & published bronze datasets:'
-            f' {[ds for ds in bronze_data_sets.keys()]}'
+            "Created, validated & published bronze datasets:"
+            f" {[ds for ds in bronze_data_sets.keys()]}"
         )
 
         silver_data_sets = self.get_silver_datasets(
@@ -259,8 +163,8 @@ class StandardETL(ABC):
         self.validate_data(silver_data_sets)
         self.publish_data(silver_data_sets, spark)
         logging.info(
-            'Created, validated & published silver datasets:'
-            f' {[ds for ds in silver_data_sets.keys()]}'
+            "Created, validated & published silver datasets:"
+            f" {[ds for ds in silver_data_sets.keys()]}"
         )
 
         gold_data_sets = self.get_gold_datasets(
@@ -269,8 +173,8 @@ class StandardETL(ABC):
         self.validate_data(gold_data_sets)
         self.publish_data(gold_data_sets, spark)
         logging.info(
-            'Created, validated & published gold datasets:'
-            f' {[ds for ds in gold_data_sets.keys()]}'
+            "Created, validated & published gold datasets:"
+            f" {[ds for ds in gold_data_sets.keys()]}"
         )
 
 
@@ -280,26 +184,26 @@ class SalesMartETL(StandardETL):
     ) -> Dict[str, DeltaDataSet]:
         customer_df, orders_df = generate_bronze_data(spark)
         return {
-            'customer': DeltaDataSet(
-                name='customer',
+            "customer": DeltaDataSet(
+                name="customer",
                 curr_data=customer_df,
-                primary_keys=['id', 'partition'],
-                storage_path=f'{self.STORAGE_PATH}/customer',
-                table_name='customer',
-                data_type='delta',
-                database=f'{self.DATABASE}',
-                partition=kwargs.get('partition', self.DEFAULT_PARTITION),
+                primary_keys=["id", "partition"],
+                storage_path=f"{self.STORAGE_PATH}/customer",
+                table_name="customer",
+                data_type="delta",
+                database=f"{self.DATABASE}",
+                partition=kwargs.get("partition", self.DEFAULT_PARTITION),
                 replace_partition=True,
             ),
-            'orders': DeltaDataSet(
-                name='orders',
+            "orders": DeltaDataSet(
+                name="orders",
                 curr_data=orders_df,
-                primary_keys=['order_id', 'partition'],
-                storage_path=f'{self.STORAGE_PATH}/orders',
-                table_name='orders',
-                data_type='delta',
-                database=f'{self.DATABASE}',
-                partition=kwargs.get('partition', self.DEFAULT_PARTITION),
+                primary_keys=["order_id", "partition"],
+                storage_path=f"{self.STORAGE_PATH}/orders",
+                table_name="orders",
+                data_type="delta",
+                database=f"{self.DATABASE}",
+                partition=kwargs.get("partition", self.DEFAULT_PARTITION),
                 replace_partition=True,
             ),
         }
@@ -308,11 +212,11 @@ class SalesMartETL(StandardETL):
         self, customer: DeltaDataSet, spark: SparkSession, **kwargs
     ) -> DataFrame:
         customer_df = customer.curr_data
-        dim_customer = kwargs['dim_customer']
+        dim_customer = kwargs["dim_customer"]
         # generete pk
         customer_df = customer_df.withColumn(
-            'customer_sur_id',
-            expr('md5(concat(id, datetime_updated))'),
+            "customer_sur_id",
+            expr("md5(concat(id, datetime_updated))"),
         )
         # get only latest customer rows in dim_customer
         # since dim customer may have multiple rows per customer (SCD2)
@@ -323,11 +227,8 @@ class SalesMartETL(StandardETL):
             customer_df.join(
                 dim_customer_latest,
                 (customer_df.id == dim_customer_latest.id)
-                & (
-                    dim_customer_latest.datetime_updated
-                    < customer_df.datetime_updated
-                ),
-                'leftanti',
+                & (dim_customer_latest.datetime_updated < customer_df.datetime_updated),
+                "leftanti",
             )
             .select(
                 customer_df.id,
@@ -338,9 +239,9 @@ class SalesMartETL(StandardETL):
                 customer_df.datetime_created,
                 customer_df.datetime_updated,
             )
-            .withColumn('current', lit(True))
-            .withColumn('valid_from', customer_df.datetime_updated)
-            .withColumn('valid_to', lit('2099-01-01 12:00:00.0000'))
+            .withColumn("current", lit(True))
+            .withColumn("valid_from", customer_df.datetime_updated)
+            .withColumn("valid_to", lit("2099-01-01 12:00:00.0000"))
         )
 
         # get rows to insert for existing ids
@@ -348,10 +249,7 @@ class SalesMartETL(StandardETL):
             customer_df.join(
                 dim_customer_latest,
                 (customer_df.id == dim_customer_latest.id)
-                & (
-                    dim_customer_latest.datetime_updated
-                    < customer_df.datetime_updated
-                ),
+                & (dim_customer_latest.datetime_updated < customer_df.datetime_updated),
             )
             .select(
                 customer_df.id,
@@ -362,19 +260,16 @@ class SalesMartETL(StandardETL):
                 customer_df.datetime_created,
                 customer_df.datetime_updated,
             )
-            .withColumn('current', lit(True))
-            .withColumn('valid_from', customer_df.datetime_updated)
-            .withColumn('valid_to', lit('2099-01-01 12:00:00.0000'))
+            .withColumn("current", lit(True))
+            .withColumn("valid_from", customer_df.datetime_updated)
+            .withColumn("valid_to", lit("2099-01-01 12:00:00.0000"))
         )
         # get rows to be updated
         customer_df_ids_update = (
             dim_customer_latest.join(
                 customer_df,
                 (dim_customer_latest.id == customer_df.id)
-                & (
-                    dim_customer_latest.datetime_updated
-                    < customer_df.datetime_updated
-                ),
+                & (dim_customer_latest.datetime_updated < customer_df.datetime_updated),
             )
             .select(
                 dim_customer_latest.id,
@@ -386,8 +281,8 @@ class SalesMartETL(StandardETL):
                 customer_df.datetime_updated,
                 dim_customer_latest.valid_from,
             )
-            .withColumn('current', lit(False))
-            .withColumn('valid_to', customer_df.datetime_updated)
+            .withColumn("current", lit(False))
+            .withColumn("valid_to", customer_df.datetime_updated)
         )
         return customer_df_insert_net_new.unionByName(
             customer_df_insert_existing_ids
@@ -399,8 +294,8 @@ class SalesMartETL(StandardETL):
         spark: SparkSession,
         **kwargs,
     ) -> DataFrame:
-        dim_customer = input_datasets['dim_customer'].curr_data
-        orders_df = input_datasets['orders'].curr_data
+        dim_customer = input_datasets["dim_customer"].curr_data
+        orders_df = input_datasets["orders"].curr_data
 
         dim_customer_curr_df = dim_customer.where("current = true")
         return orders_df.join(
@@ -423,40 +318,40 @@ class SalesMartETL(StandardETL):
         spark: SparkSession,
         **kwargs,
     ) -> Dict[str, DeltaDataSet]:
-        self.check_required_inputs(input_datasets, ['customer', 'orders'])
+        self.check_required_inputs(input_datasets, ["customer", "orders"])
         dim_customer_df = self.get_dim_customer(
-            input_datasets['customer'],
+            input_datasets["customer"],
             spark,
-            dim_customer=spark.read.table(f'{self.DATABASE}.dim_customer'),
+            dim_customer=spark.read.table(f"{self.DATABASE}.dim_customer"),
         )
 
         silver_datasets = {}
-        silver_datasets['dim_customer'] = DeltaDataSet(
-            name='dim_customer',
+        silver_datasets["dim_customer"] = DeltaDataSet(
+            name="dim_customer",
             curr_data=dim_customer_df,
-            primary_keys=['customer_sur_id'],
-            storage_path=f'{self.STORAGE_PATH}/dim_customer',
-            table_name='dim_customer',
-            data_type='delta',
-            database=f'{self.DATABASE}',
-            partition=kwargs.get('partition', self.DEFAULT_PARTITION),
+            primary_keys=["customer_sur_id"],
+            storage_path=f"{self.STORAGE_PATH}/dim_customer",
+            table_name="dim_customer",
+            data_type="delta",
+            database=f"{self.DATABASE}",
+            partition=kwargs.get("partition", self.DEFAULT_PARTITION),
         )
         self.publish_data(silver_datasets, spark)
-        silver_datasets['dim_customer'].curr_data = spark.read.table(
-            f'{self.DATABASE}.dim_customer'
+        silver_datasets["dim_customer"].curr_data = spark.read.table(
+            f"{self.DATABASE}.dim_customer"
         )
-        silver_datasets['dim_customer'].skip_publish = True
-        input_datasets['dim_customer'] = silver_datasets['dim_customer']
+        silver_datasets["dim_customer"].skip_publish = True
+        input_datasets["dim_customer"] = silver_datasets["dim_customer"]
 
-        silver_datasets['fct_orders'] = DeltaDataSet(
-            name='fct_orders',
+        silver_datasets["fct_orders"] = DeltaDataSet(
+            name="fct_orders",
             curr_data=self.get_fct_orders(input_datasets, spark),
-            primary_keys=['order_id'],
-            storage_path=f'{self.STORAGE_PATH}/fct_orders',
-            table_name='fct_orders',
-            data_type='delta',
-            database=f'{self.DATABASE}',
-            partition=kwargs.get('partition', self.DEFAULT_PARTITION),
+            primary_keys=["order_id"],
+            storage_path=f"{self.STORAGE_PATH}/fct_orders",
+            table_name="fct_orders",
+            data_type="delta",
+            database=f"{self.DATABASE}",
+            partition=kwargs.get("partition", self.DEFAULT_PARTITION),
             replace_partition=True,
         )
         return silver_datasets
@@ -465,11 +360,11 @@ class SalesMartETL(StandardETL):
         self, input_datasets: Dict[str, DeltaDataSet], **kwargs
     ) -> DataFrame:
         dim_customer = (
-            input_datasets['dim_customer']
+            input_datasets["dim_customer"]
             .curr_data.where("current = true")
             .select("customer_sur_id", "state_id")
         )
-        fct_orders = input_datasets['fct_orders'].curr_data
+        fct_orders = input_datasets["fct_orders"].curr_data
         return (
             fct_orders.alias("fct_orders")
             .join(
@@ -494,20 +389,18 @@ class SalesMartETL(StandardETL):
         spark: SparkSession,
         **kwargs,
     ) -> Dict[str, DeltaDataSet]:
-        self.check_required_inputs(
-            input_datasets, ['dim_customer', 'fct_orders']
-        )
+        self.check_required_inputs(input_datasets, ["dim_customer", "fct_orders"])
         sales_mart_df = self.get_sales_mart(input_datasets)
         return {
-            'sales_mart': DeltaDataSet(
-                name='sales_mart',
+            "sales_mart": DeltaDataSet(
+                name="sales_mart",
                 curr_data=sales_mart_df,
-                primary_keys=['deliver_date', 'state_id', 'partition'],
-                storage_path=f'{self.STORAGE_PATH}/sales_mart',
-                table_name='sales_mart',
-                data_type='delta',
-                database=f'{self.DATABASE}',
-                partition=kwargs.get('partition', self.DEFAULT_PARTITION),
+                primary_keys=["deliver_date", "state_id", "partition"],
+                storage_path=f"{self.STORAGE_PATH}/sales_mart",
+                table_name="sales_mart",
+                data_type="delta",
+                database=f"{self.DATABASE}",
+                partition=kwargs.get("partition", self.DEFAULT_PARTITION),
                 replace_partition=True,
             )
         }
@@ -515,9 +408,7 @@ class SalesMartETL(StandardETL):
 
 if __name__ == "__main__":
     spark = (
-        SparkSession.builder.appName("adventureworks")
-        .enableHiveSupport()
-        .getOrCreate()
+        SparkSession.builder.appName("adventureworks").enableHiveSupport().getOrCreate()
     )
     spark.sparkContext.setLogLevel("ERROR")
     sm = SalesMartETL()
