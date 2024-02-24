@@ -163,4 +163,4 @@ cython_debug/
 /logs
 __init__*
 
-*.pyc*
+*.pyc
