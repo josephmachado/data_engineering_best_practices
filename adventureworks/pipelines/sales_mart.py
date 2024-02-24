@@ -10,7 +10,11 @@ from delta.tables import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, current_timestamp, expr, lit
 
-from utils.create_fake_data import generate_bronze_data
+try:
+    from adventureworks.pipelines.utils.create_fake_data import \
+        generate_bronze_data
+except ModuleNotFoundError:
+    from utils.create_fake_data import generate_bronze_data  # type: ignore
 
 
 @dataclass
@@ -70,9 +74,9 @@ class StandardETL(ABC):
     def validate_data(self, input_datasets: Dict[str, DeltaDataSet]) -> bool:
         results = {}
         for validation in self.run_data_validations(input_datasets):
-            results[validation.get("meta").get("expectation_suite_name")] = (
-                validation.get("success")
-            )
+            results[
+                validation.get("meta").get("expectation_suite_name")
+            ] = validation.get("success")
         for k, v in results.items():
             if not v:
                 raise InValidDataException(
@@ -111,12 +115,16 @@ class StandardETL(ABC):
                         f"partition = '{input_dataset.partition}'",
                     ).save(input_dataset.storage_path)
                 else:
-                    targetDF = DeltaTable.forPath(spark, input_dataset.storage_path)
+                    targetDF = DeltaTable.forPath(
+                        spark, input_dataset.storage_path
+                    )
                     (
                         targetDF.alias("target")
                         .merge(
                             curr_data.alias("source"),
-                            self.construct_join_string(input_dataset.primary_keys),
+                            self.construct_join_string(
+                                input_dataset.primary_keys
+                            ),
                         )
                         .whenMatchedUpdateAll()
                         .whenNotMatchedInsertAll()
@@ -227,7 +235,10 @@ class SalesMartETL(StandardETL):
             customer_df.join(
                 dim_customer_latest,
                 (customer_df.id == dim_customer_latest.id)
-                & (dim_customer_latest.datetime_updated < customer_df.datetime_updated),
+                & (
+                    dim_customer_latest.datetime_updated
+                    < customer_df.datetime_updated
+                ),
                 "leftanti",
             )
             .select(
@@ -249,7 +260,10 @@ class SalesMartETL(StandardETL):
             customer_df.join(
                 dim_customer_latest,
                 (customer_df.id == dim_customer_latest.id)
-                & (dim_customer_latest.datetime_updated < customer_df.datetime_updated),
+                & (
+                    dim_customer_latest.datetime_updated
+                    < customer_df.datetime_updated
+                ),
             )
             .select(
                 customer_df.id,
@@ -269,7 +283,10 @@ class SalesMartETL(StandardETL):
             dim_customer_latest.join(
                 customer_df,
                 (dim_customer_latest.id == customer_df.id)
-                & (dim_customer_latest.datetime_updated < customer_df.datetime_updated),
+                & (
+                    dim_customer_latest.datetime_updated
+                    < customer_df.datetime_updated
+                ),
             )
             .select(
                 dim_customer_latest.id,
@@ -389,7 +406,9 @@ class SalesMartETL(StandardETL):
         spark: SparkSession,
         **kwargs,
     ) -> Dict[str, DeltaDataSet]:
-        self.check_required_inputs(input_datasets, ["dim_customer", "fct_orders"])
+        self.check_required_inputs(
+            input_datasets, ["dim_customer", "fct_orders"]
+        )
         sales_mart_df = self.get_sales_mart(input_datasets)
         return {
             "sales_mart": DeltaDataSet(
@@ -408,7 +427,9 @@ class SalesMartETL(StandardETL):
 
 if __name__ == "__main__":
     spark = (
-        SparkSession.builder.appName("adventureworks").enableHiveSupport().getOrCreate()
+        SparkSession.builder.appName("adventureworks")
+        .enableHiveSupport()
+        .getOrCreate()
     )
     spark.sparkContext.setLogLevel("ERROR")
     sm = SalesMartETL()
